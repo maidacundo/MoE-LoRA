@@ -1,8 +1,8 @@
 
 from .wikipedia.dataset import get_datasets
+from .training_config import TrainingConfiguration
 
 from lora_moe import LoraMoeConfig, LoraMoeModel 
-from training_config import TrainingConfiguration
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, get_scheduler
 from peft import prepare_model_for_kbit_training
@@ -136,7 +136,7 @@ def train(config: TrainingConfiguration):
 
     if config.quantize:
         moe_model = prepare_model_for_kbit_training(moe_model, use_gradient_checkpointing=True)
-    
+    moe_model.make_experts_trainable()
 
     if config.use_8bit_adam:
         try:

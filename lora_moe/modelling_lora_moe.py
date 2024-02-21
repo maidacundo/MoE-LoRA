@@ -18,7 +18,10 @@ from transformers.utils import (
     is_flash_attn_2_available,
     logging,
 )
-from configuration_lora_moe import LoraMoeConfig
+from .configuration_lora_moe import LoraMoeConfig
+from .peft_experts import (
+    LoraExpert
+)
 
 from transformers.models.mistral.modeling_mistral import (
     MistralRMSNorm,
@@ -29,9 +32,7 @@ from transformers.models.mixtral.modeling_mixtral import (
     load_balancing_loss_func
 )
 
-from peft_experts import (
-    LoraExpert
-)
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -42,7 +43,7 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 class LoraMoeModel(torch.nn.Module):
-    def __init__(self, model: PreTrainedModel, config: LoraMoeConfig, layer_ids: Optional[list[int]]):
+    def __init__(self, model: PreTrainedModel, config: LoraMoeConfig, layer_ids: Optional[list[int]] = None):
         """
         **This mutates the wrapped `model`! Be careful using `model` after passing it to this class.**
 
@@ -464,8 +465,6 @@ def causal_model_forward(
     return_dict: Optional[bool] = None,
 ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
     
-    print(type(self))
-        
     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
     output_router_logits = (
         output_router_logits if output_router_logits is not None else self.config.output_router_logits
@@ -512,10 +511,10 @@ def causal_model_forward(
     aux_loss = None
     if output_router_logits:
         aux_loss = load_balancing_loss_func(
-            outputs.router_logits if return_dict else outputs[-1], self.num_experts, self.num_experts_per_tok
+            outputs.router_logits if return_dict else outputs[-1], self.config.num_local_experts, self.config.num_experts_per_tok
         )
         if labels is not None:
-            loss += self.router_aux_loss_coef * aux_loss
+            loss += self.config.router_aux_loss_coef * aux_loss
 
     if not return_dict:
         output = (logits,) + outputs[1:]

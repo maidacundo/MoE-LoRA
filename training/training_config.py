@@ -13,9 +13,9 @@ class TrainingConfiguration:
     # Training parameters
     seed: int = 42
     num_epochs: int = 1
-    train_batch_size: int = 8
-    eval_batch_size: int = 8
-    context_length: int = 512 # number of tokens to use as context
+    train_batch_size: int = 1
+    eval_batch_size: int = 1
+    context_length: int = 64 # number of tokens to use as context
     num_train_texts: int = 5000 # number of wikipedia articles to use for training
     learning_rate: float = 1e-4 
     eval_steps: int = 100 # how often to evaluate the model
@@ -23,7 +23,7 @@ class TrainingConfiguration:
     # Model parameters
     mixed_precision: bool = "fp16"
     use_8bit_adam: bool = False
-    quantize: bool = False
+    quantize: bool = True
     base_model_id: str = "mistralai/Mistral-7B-v0.1"
 
     # Logging parameters

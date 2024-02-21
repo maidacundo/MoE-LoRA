@@ -5,7 +5,7 @@ from transformers.models.mistral.modeling_mistral import (
     MistralMLP,
 )
 
-from configuration_lora_moe import LoraMoeConfig
+from .configuration_lora_moe import LoraMoeConfig
 
 class LoraInjectedLinear(nn.Module):
     def __init__(
