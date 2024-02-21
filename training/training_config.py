@@ -21,7 +21,7 @@ class TrainingConfiguration:
     eval_steps: int = 100 # how often to evaluate the model
 
     # Model parameters
-    mixed_precision: bool = "bf16"
+    mixed_precision: bool = "fp16"
     use_8bit_adam: bool = False
     quantize: bool = False
     base_model_id: str = "mistralai/Mistral-7B-v0.1"

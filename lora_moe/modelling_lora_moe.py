@@ -42,7 +42,7 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 class LoraMoeModel(torch.nn.Module):
-    def __init__(self, model: PreTrainedModel, config: LoraMoeConfig, layer_ids: list[int]):
+    def __init__(self, model: PreTrainedModel, config: LoraMoeConfig, layer_ids: Optional[list[int]]):
         """
         **This mutates the wrapped `model`! Be careful using `model` after passing it to this class.**
 
@@ -53,7 +53,10 @@ class LoraMoeModel(torch.nn.Module):
         super().__init__()
         self.base_model = model
         self.config = config
-        self.layer_ids = layer_ids
+
+        if layer_ids is None:
+            layer_ids = list(range(len(self.base_model.model.layers)))
+
         for layer_id in layer_ids:
             layer: torch.nn.Module = self.base_model.model.layers[layer_id]  # type: ignore
             if not isinstance(layer, LoraMoeDecoderLayer):

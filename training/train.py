@@ -1,5 +1,5 @@
 
-from wikipedia.dataset import get_datasets
+from .wikipedia.dataset import get_datasets
 
 from lora_moe import LoraMoeConfig, LoraMoeModel 
 from training_config import TrainingConfiguration
@@ -120,20 +120,19 @@ def train(config: TrainingConfiguration):
     if config.quantize:
         bnb_config = get_qlora_bnb_config()
 
+    model = AutoModelForCausalLM.from_pretrained(
+        config.base_model_id,
+        quantization_config=bnb_config,
+    )
+
     model_config = LoraMoeConfig.from_pretrained(config.base_model_id)
     model_config.experts_rank = config.experts_rank
     model_config.experts_scale = config.experts_scale
     model_config.num_experts_per_tok = config.num_experts_per_tok
     model_config.num_local_experts = config.num_local_experts
     model_config.output_router_logits = True
-       
-    model = AutoModelForCausalLM.from_pretrained(
-        config.base_model_id,
-        quantization_config=bnb_config,
-        config=model_config,
-    )
 
-    moe_model = LoraMoeModel(model, config)
+    moe_model = LoraMoeModel(model, model_config)
 
     if config.quantize:
         moe_model = prepare_model_for_kbit_training(moe_model, use_gradient_checkpointing=True)
