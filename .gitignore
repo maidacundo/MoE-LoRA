@@ -1,0 +1,6 @@
+# ignore pycache
+__pycache__/
+# ignore .DS_Store
+.DS_Store
+# ignore .env
+.env

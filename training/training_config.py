@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 @dataclass
-class TrainingConfiguration:
+class TrainingConfig:
 
     # LoRA MoE parameters
     experts_rank: int = 8

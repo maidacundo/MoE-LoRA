@@ -1,8 +1,8 @@
 
 from .wikipedia.dataset import get_datasets
-from .training_config import TrainingConfiguration
+from .training_config import TrainingConfig
 
-from lora_moe import LoraMoeConfig, LoraMoeModel 
+from lora_moe import LoraMoeConfig, LoraMoeModel
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, get_scheduler
 from peft import prepare_model_for_kbit_training
@@ -21,6 +21,19 @@ from accelerate import Accelerator, DistributedDataParallelKwargs
 
 logger = get_logger(__name__)
 
+# TODO implement the function to remove the peft from the model
+# to be able to save the model without the peft
+def pop_peft(model):
+    print('removing peft from model...')
+
+    lora_state = {}
+    for k, v in model.state_dict().items():
+        if 'lora' in k:
+            lora_state[k] = v
+    
+    del model
+    torch.cuda.empty_cache()
+    return lora_state
 
 def evaluate(model, accelerator, eval_dataloader):
     losses = []
@@ -44,7 +57,7 @@ def evaluate(model, accelerator, eval_dataloader):
 
     return loss.item(), aux_loss.item(), perplexity.item()
 
-def train(config: TrainingConfiguration):
+def train(config: TrainingConfig):
 
     if config.resume_from:
         config.resume_from = os.path.normpath(os.path.expanduser(config.resume_from))
@@ -86,13 +99,7 @@ def train(config: TrainingConfiguration):
         )
 
     set_seed(config.seed)
-
-    inference_dtype = torch.float32
-    if accelerator.mixed_precision == "fp16":
-        inference_dtype = torch.float16
-    elif accelerator.mixed_precision == "bf16":
-        inference_dtype = torch.bfloat16
-
+    
     tokenizer = AutoTokenizer.from_pretrained(config.base_model_id, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.truncation_side = "left"

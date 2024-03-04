@@ -18,6 +18,7 @@ from transformers.utils import (
     is_flash_attn_2_available,
     logging,
 )
+
 from .configuration_lora_moe import LoraMoeConfig
 from .peft_experts import (
     LoraExpert
@@ -33,7 +34,6 @@ from transformers.models.mixtral.modeling_mixtral import (
 )
 
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -47,8 +47,16 @@ class LoraMoeModel(torch.nn.Module):
         """
         **This mutates the wrapped `model`! Be careful using `model` after passing it to this class.**
 
-        Build a new ControlModel around a model instance, initializing control on
-        the layers specified in `layer_ids`.
+        Build a new LoraMoeModel around a model instance.
+        LoRA MoE layers are injected into the model at the specified layer_ids.
+
+        Args:
+            model (:obj:`PreTrainedModel`):
+                The model to wrap.
+            config (:obj:`LoraMoeConfig`):
+                The configuration for the LoRA MoE model.
+            layer_ids (:obj:`List[int]`, `optional`):
+                The indices of the layers to wrap. If not provided, all layers will be wrapped.
         """
 
         super().__init__()
@@ -87,7 +95,6 @@ class LoraMoeModel(torch.nn.Module):
     def unwrap(self) -> PreTrainedModel:
         """
         Removes the mutations done to the wrapped model and returns it.
-        After using this method, `set_control` and `reset` will not work.
         """
 
         for layer_id in self.layer_ids:
@@ -118,7 +125,6 @@ class LoraMoeModel(torch.nn.Module):
         
         print(f"Total parameters: {total_params}")
         print(f"Trainable parameters: {trainable_params}")
-
 
 # Custom Implementation of the Mixtral Decoder with LoRA MoE
 class NoisyTopkRouter(nn.Module):

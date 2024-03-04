@@ -2,7 +2,6 @@
 
 from transformers.models.mistral.modeling_mistral import MistralConfig
 
-
 class LoraMoeConfig(MistralConfig):
     r"""
         experts_ranks (`int`, *optional*, defaults to 8):
