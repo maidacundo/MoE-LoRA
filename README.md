@@ -22,3 +22,12 @@ model_config.output_router_logits = True
 moe_model = LoraMoeModel(model, model_config) # injects MoE-LoRA adapters in the MLP
 moe_model.make_experts_trainable() # train only the adapters
 ```
+
+```bash
+git clone https://github.com/maidacundo/MoE-LoRA.git
+cd MoE-LoRA/
+pip install -r requirements.txt
+wandb login
+huggingface-cli login
+accelerate launch train_openassistant.py
+```
