@@ -4,6 +4,9 @@ from typing import Optional
 @dataclass
 class TrainingConfig:
 
+    # Dataset Task
+    dataset: str = "openassistant"
+
     # LoRA MoE parameters
     experts_rank: int = 8
     experts_scale: float = 1.0

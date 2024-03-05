@@ -18,7 +18,7 @@ def tokenize(element, tokenizer, context_length=128):
     return {"input_ids": input_batch,
             "attention_mask": attention_mask_batch,}
 
-def get_datasets(tokenizer, context_length=128, num_train_texts=5000, min_length=10):
+def get_wikipedia_datasets(tokenizer, context_length=128, num_train_texts=5000, min_length=10):
 
     wikipedia_ds = load_dataset('maidacundo/wikipedia-it', split=f'train[:{num_train_texts}]')
     wikipedia_ds = wikipedia_ds.train_test_split(test_size=0.01)

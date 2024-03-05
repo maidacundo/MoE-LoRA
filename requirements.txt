@@ -1,0 +1,7 @@
+transformers==4.37
+datasets 
+accelerate 
+evaluate 
+wandb 
+bitsandbytes 
+peft

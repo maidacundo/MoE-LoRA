@@ -1,5 +1,4 @@
 
-from .wikipedia.dataset import get_datasets
 from .training_config import TrainingConfig
 
 from lora_moe import LoraMoeConfig, LoraMoeModel
@@ -105,11 +104,23 @@ def train(config: TrainingConfig):
     tokenizer.truncation_side = "left"
 
     with accelerator.main_process_first():
-        tokenized_datasets = get_datasets(
-            tokenizer, 
-            context_length=config.context_length, 
-            num_train_texts=config.num_train_texts,
-            )
+        if config.dataset == "wikipedia_it":
+            from training.datasets import get_wikipedia_datasets
+            tokenized_datasets = get_wikipedia_datasets(
+                tokenizer, 
+                context_length=config.context_length, 
+                num_train_texts=config.num_train_texts,
+                )
+        elif config.dataset == "openassistant":
+            from training.datasets import get_openassistant_datasets
+            tokenized_datasets = get_openassistant_datasets(
+                tokenizer, 
+                context_length=config.context_length, 
+                num_train_texts=config.num_train_texts,
+                )
+        else:
+            raise ValueError(f"Dataset {config.dataset} not found.")
+
 
     data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
     train_dataloader = DataLoader(
