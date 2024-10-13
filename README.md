@@ -19,7 +19,7 @@ model_config.num_experts_per_tok = 2 # number of expert to use for each token
 model_config.num_local_experts = 8 # numer of LoRA experts to initialize
 model_config.output_router_logits = True
 
-moe_model = LoraMoeModel(model, model_config) # injects MoE-LoRA adapters in the MLP
+moe_model = LoraMoeModel(model, model_config) # injects MoE-LoRA adapters in the FFN
 moe_model.make_experts_trainable() # train only the adapters
 ```
 
