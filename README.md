@@ -1,7 +1,7 @@
 # MoE-LoRA: Mixture-of-Experts Adaptation of LLM using Parameter Efficient Method
 
 This implementation adapts a LLama-like model (like Mistral 7B) to a Mixture-of-Experts model (like Mixstral 8x7B), using Parameter Efficient finetuning (LoRA).
-LoRA adapters are injected in the MLP to mimic finetuning of Mixstral.
+LoRA adapters are injected in the FFN to mimic finetuning of Mixstral.
 
 ```python
 from transformers import AutoModelForCausalLM
