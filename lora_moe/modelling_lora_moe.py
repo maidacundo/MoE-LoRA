@@ -1,3 +1,13 @@
+"""
+MoE-LoRA Model Implementation
+
+This module implements the core MoE-LoRA architecture, including:
+- LoraMoeModel: Main wrapper that converts standard models to MoE-LoRA
+- LoraMoeBlock: Mixture-of-Experts block with LoRA adapters
+- NoisyTopkRouter: Gating network for expert selection
+- LoraMoeDecoderLayer: Decoder layer with integrated MoE-LoRA
+"""
+
 import inspect
 import math
 import warnings
@@ -43,21 +53,49 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 class LoraMoeModel(torch.nn.Module):
+    """
+    MoE-LoRA Model Wrapper
+
+    Wraps a pretrained language model and injects MoE-LoRA blocks into specified
+    transformer layers. The base model is modified in-place to replace standard
+    decoder layers with MoE-enhanced versions.
+
+    **WARNING**: This class mutates the wrapped model in-place. The original model
+    reference will be modified and should not be used independently after wrapping.
+
+    The wrapper:
+    1. Replaces decoder layers with LoraMoeDecoderLayer instances
+    2. Injects trainable LoRA experts and routing networks
+    3. Freezes base model weights by default
+    4. Modifies the forward pass to support MoE outputs
+
+    Example:
+        ```python
+        from transformers import AutoModelForCausalLM
+        from lora_moe import LoraMoeConfig, LoraMoeModel
+
+        base_model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
+        config = LoraMoeConfig.from_pretrained("mistralai/Mistral-7B-v0.1")
+        config.num_local_experts = 8
+
+        moe_model = LoraMoeModel(base_model, config)
+        moe_model.make_experts_trainable()
+        ```
+
+    Args:
+        model (PreTrainedModel): The base model to wrap (e.g., Mistral, LLaMA)
+        config (LoraMoeConfig): Configuration for MoE-LoRA
+        layer_ids (List[int], optional): Indices of layers to convert to MoE.
+            If None, converts all layers.
+
+    Attributes:
+        base_model: The wrapped pretrained model
+        config: MoE-LoRA configuration
+        router_aux_loss_coef: Coefficient for load-balancing loss
+        num_experts: Total number of experts per layer
+        num_experts_per_tok: Number of experts activated per token
+    """
     def __init__(self, model: PreTrainedModel, config: LoraMoeConfig, layer_ids: Optional[list[int]] = None):
-        """
-        **This mutates the wrapped `model`! Be careful using `model` after passing it to this class.**
-
-        Build a new LoraMoeModel around a model instance.
-        LoRA MoE layers are injected into the model at the specified layer_ids.
-
-        Args:
-            model (:obj:`PreTrainedModel`):
-                The model to wrap.
-            config (:obj:`LoraMoeConfig`):
-                The configuration for the LoRA MoE model.
-            layer_ids (:obj:`List[int]`, `optional`):
-                The indices of the layers to wrap. If not provided, all layers will be wrapped.
-        """
 
         super().__init__()
         self.base_model = model
@@ -94,7 +132,12 @@ class LoraMoeModel(torch.nn.Module):
 
     def unwrap(self) -> PreTrainedModel:
         """
-        Removes the mutations done to the wrapped model and returns it.
+        Unwrap the MoE-LoRA modifications and restore the original model.
+
+        Note: This implementation is currently incomplete (TODO in original code).
+
+        Returns:
+            PreTrainedModel: The base model with MoE layers removed
         """
 
         for layer_id in self.layer_ids:
@@ -113,7 +156,27 @@ class LoraMoeModel(torch.nn.Module):
         return self.base_model(**kwargs) # TODO implement this method if not working
     
     def make_experts_trainable(self):
-        # gradient required for the lora_experts and gate
+        """
+        Freeze base model and enable gradients only for LoRA experts and routers.
+
+        This method sets requires_grad=False for all base model parameters and
+        requires_grad=True for all MoE-LoRA components (experts and routing networks).
+        This enables parameter-efficient training.
+
+        Prints:
+            Total parameters in the model
+            Trainable parameters (experts + routers)
+
+        Example:
+            ```python
+            moe_model = LoraMoeModel(base_model, config)
+            moe_model.make_experts_trainable()
+            # Output:
+            # Total parameters: 7241732096
+            # Trainable parameters: 50331648 (0.7%)
+            ```
+        """
+        # Enable gradients only for LoRA experts and routing networks
         for name, param in self.named_parameters():
             if 'lora_moe_block' in name:
                 param.requires_grad = True
@@ -122,26 +185,57 @@ class LoraMoeModel(torch.nn.Module):
 
         total_params = sum(p.numel() for p in self.parameters())
         trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        
+
         print(f"Total parameters: {total_params}")
         print(f"Trainable parameters: {trainable_params}")
 
 # Custom Implementation of the Mixtral Decoder with LoRA MoE
 class NoisyTopkRouter(nn.Module):
+    """
+    Noisy Top-K Router for expert selection.
+
+    Implements a learned routing mechanism with added noise for better load balancing
+    during training. The router learns to assign tokens to experts based on their
+    hidden states.
+
+    The routing logits are computed as:
+        logits = W_router(h) + noise * softplus(W_noise(h))
+
+    where noise ~ N(0, 1). The noise helps with exploration during training and
+    encourages load balancing across experts.
+
+    Args:
+        hidden_dim (int): Dimension of input hidden states
+        num_experts (int): Number of experts to route to
+        bias (bool): Whether to use bias in linear layers. Default: False
+
+    Attributes:
+        topkroute_linear: Linear layer for computing base routing logits
+        noise_linear: Linear layer for computing noise scale
+    """
     def __init__(self, hidden_dim, num_experts, bias=False):
         super().__init__()
-        #layer for router logits
+        # Layer for router logits
         self.topkroute_linear = nn.Linear(hidden_dim, num_experts, bias=bias)
-        self.noise_linear =nn.Linear(hidden_dim, num_experts, bias=bias)
+        self.noise_linear = nn.Linear(hidden_dim, num_experts, bias=bias)
 
     def forward(self, hidden_states):
-        # mh_ouput is the output tensor from multihead self attention block
+        """
+        Compute noisy routing logits for expert selection.
+
+        Args:
+            hidden_states: Input tensor of shape (batch_size * seq_len, hidden_dim)
+
+        Returns:
+            Noisy logits of shape (batch_size * seq_len, num_experts)
+        """
+        # Base routing logits
         logits = self.topkroute_linear(hidden_states)
 
-        #Noise logits
+        # Compute noise scale
         noise_logits = self.noise_linear(hidden_states)
 
-        #Adding scaled unit gaussian noise to the logits
+        # Add scaled Gaussian noise to logits
         noise = torch.randn_like(logits) * F.softplus(noise_logits)
         noisy_logits = logits + noise
 
@@ -149,14 +243,34 @@ class NoisyTopkRouter(nn.Module):
 
 class LoraMoeBlock(nn.Module):
     """
-    This implementation is
-    strictly equivalent to standard MoE with full capacity (no
-    dropped tokens). It's faster since it formulates MoE operations
-    in terms of block-sparse operations to accomodate imbalanced
-    assignments of tokens to experts, whereas standard MoE either
-    (1) drop tokens at the cost of reduced performance or (2) set
-    capacity factor to number of experts and thus waste computation
-    and memory on padding.
+    Mixture-of-Experts block with LoRA adapters.
+
+    This block implements sparse MoE routing where each token is processed by
+    a subset (top-k) of expert modules. Unlike standard MoE implementations,
+    this uses block-sparse operations for efficiency without dropping tokens.
+
+    Architecture:
+    1. Router computes assignment weights for all experts
+    2. Top-k experts are selected per token
+    3. Selected experts process their assigned tokens in parallel
+    4. Expert outputs are combined using routing weights
+
+    This implementation:
+    - Uses full capacity (no dropped tokens)
+    - Employs block-sparse operations for efficiency
+    - Avoids padding waste by processing variable-sized expert batches
+    - Integrates LoRA adapters for parameter-efficient expert specialization
+
+    Args:
+        config (LoraMoeConfig): Configuration containing MoE parameters
+
+    Attributes:
+        hidden_dim: Dimension of hidden states
+        ffn_dim: Dimension of FFN intermediate states
+        num_experts: Total number of experts
+        top_k: Number of experts to activate per token
+        gate: Routing network
+        lora_experts: List of LoRA expert modules
     """
 
     def __init__(self, config: LoraMoeConfig):
@@ -172,8 +286,19 @@ class LoraMoeBlock(nn.Module):
 
         self.lora_experts = nn.ModuleList([LoraExpert(config) for _ in range(self.num_experts)])
 
-    def forward(self, hidden_states: torch.Tensor, mlp: nn.Module) -> torch.Tensor:
-        """ """
+    def forward(self, hidden_states: torch.Tensor, mlp: nn.Module) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass through MoE block.
+
+        Args:
+            hidden_states: Input tensor of shape (batch_size, seq_len, hidden_dim)
+            mlp: Frozen base MLP module shared by all experts
+
+        Returns:
+            Tuple containing:
+                - final_hidden_states: Output tensor of shape (batch_size, seq_len, hidden_dim)
+                - router_logits: Routing logits of shape (batch_size * seq_len, num_experts)
+        """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)

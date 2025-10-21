@@ -1,21 +1,50 @@
-""" MoE LoRA model configuration"""
+"""
+MoE-LoRA Model Configuration
+
+This module defines the configuration class for MoE-LoRA models, extending the
+Mistral configuration with parameters specific to Mixture-of-Experts and LoRA adaptation.
+"""
 
 from transformers.models.mistral.modeling_mistral import MistralConfig
 
 class LoraMoeConfig(MistralConfig):
     r"""
-        experts_ranks (`int`, *optional*, defaults to 8):
-            The rank of the LoRA experts
+    Configuration class for MoE-LoRA models.
+
+    This configuration extends MistralConfig with additional parameters for configuring
+    the Mixture-of-Experts architecture using LoRA (Low-Rank Adaptation) experts.
+
+    Args:
+        experts_rank (`int`, *optional*, defaults to 8):
+            The rank of the LoRA projection matrices. Higher values provide more
+            capacity but increase parameters. Typical values: 4, 8, 16, 32.
+        experts_scale (`float`, *optional*, defaults to 1.0):
+            Scaling factor applied to LoRA adapter outputs. Controls the magnitude
+            of the adaptation. Equivalent to alpha/rank in standard LoRA.
         num_experts_per_tok (`int`, *optional*, defaults to 2):
-            The number of experts to root per-token, can be also interpreted as the `top-p` routing
-            parameter
+            Number of experts activated per token (top-k routing). Higher values
+            increase computation but may improve quality. Typically 1-4.
         num_local_experts (`int`, *optional*, defaults to 8):
-            Number of experts per Sparse MLP layer.
+            Total number of expert modules in each MoE layer. Common values: 4, 8, 16.
+            More experts provide greater specialization but increase memory usage.
         output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
-            allow the model to output the auxiliary loss. See [here]() for more details
+            Whether to return router logits in model outputs. Must be True to compute
+            the auxiliary load-balancing loss during training.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
+            Coefficient for the auxiliary load-balancing loss. Encourages even
+            distribution of tokens across experts. Higher values enforce stronger
+            load balancing. Typical range: 0.0001 to 0.01.
+
+    Example:
+        ```python
+        from lora_moe import LoraMoeConfig
+
+        config = LoraMoeConfig.from_pretrained("mistralai/Mistral-7B-v0.1")
+        config.experts_rank = 16
+        config.num_local_experts = 8
+        config.num_experts_per_tok = 2
+        config.output_router_logits = True
+        ```
     """
 
     def __init__(
